@@ -1,0 +1,98 @@
+@page "/showdatadb"
+@page "/showdatadb/{clientid}"
+@using Microsoft.AspNetCore.Components
+@using JobSatisfactionApp.Models
+@using Microsoft.EntityFrameworkCore
+
+@inject IDbContextFactory<ClientIDContext> contextFactory
+@inject IJSRuntime js
+@inject NavigationManager uriHelper
+
+
+<h3>Show Client Data</h3>
+
+<div class="row">
+    <div class="col-md-3">
+        <input type="text" value="@initialclientname" @oninput="ClientNameChanged" />
+        
+    </div>
+    <div class="col-md-9">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Client Id</th>
+                    <th>Client Name</th>
+                    <th>Job Title</th>
+                    <th>Skills</th>
+                    
+                    <th>Edit</th>
+                    <th>Delete</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var icn in ClientList)
+                {
+                    <tr>
+                        <td>@icn.ClientId</td>
+                        <td>@icn.ClientName</td>
+                        <td>@icn.JobTitle</td>
+                        <td>@string.Join(", ", icn.Skill.Select(s => s.JobSkills))</td>
+                        <td><a href="editprod/edit/@icn.ClientId">Edit</a></td>
+                        <td><button @onclick="() => Delete(icn.ClientId)">Delete</button></td>
+                    </tr>
+                }
+
+            </tbody>
+        </table>
+    </div>
+</div>
+
+
+@code {
+    private List<Client> ClientList = new List<Client>();
+    
+    private string initialclientname;
+    [Parameter]
+    public string ClientId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = contextFactory.CreateDbContext();
+        ClientList = await context.Clients.Include(s => s.Skills).ToListAsync();
+        if (!string.IsNullOrEmpty(ClientId))
+        {
+            if (int.TryParse(ClientId, out int clientId))
+            {
+                var client = ClientList.FirstOrDefault(c => c.ClientId == clientId);
+                if (client != null)
+                {
+                    initialclientname = client.ClientName;
+                }
+            }
+        }
+    }
+
+    async Task ClientNameChanged(ChangeEventArgs e)
+    {
+        initialclientname = e.Value.ToString();
+        using var context = contextFactory.CreateDbContext();
+        ClientList = await context.Clients.Include(c => c.Skills).Where(c => c.ClientName.Contains(initialclientname)).ToListAsync();
+    }
+
+    async Task Delete(int clientId)
+    {
+        if (await js.InvokeAsync<bool>("confirm", $"Do you want to delete client {clientId}?"))
+        {
+            using var context = contextFactory.CreateDbContext();
+            var client = await context.Clients.FindAsync(clientId);
+            if (client != null)
+            {
+                context.Clients.Remove(client);
+                await context.SaveChangesAsync();
+                uriHelper.NavigateTo("/showdatadb");
+            }
+        }
+    }
+    
+    
+}
